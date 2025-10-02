@@ -43,6 +43,8 @@ describe('mcp-client', () => {
         getStatus: vi.fn(),
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({ tools: {}, prompts: {} }),
+        request: vi.fn().mockResolvedValue({ prompts: [] }),
       };
       vi.mocked(ClientLib.Client).mockReturnValue(
         mockedClient as unknown as ClientLib.Client,
@@ -89,6 +91,8 @@ describe('mcp-client', () => {
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
         tool: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({ tools: {}, prompts: {} }),
+        request: vi.fn().mockResolvedValue({ prompts: [] }),
       };
       vi.mocked(ClientLib.Client).mockReturnValue(
         mockedClient as unknown as ClientLib.Client,
@@ -181,6 +185,50 @@ describe('mcp-client', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         `Error discovering prompts from test-server: Test error`,
       );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should handle prompt-only servers gracefully', async () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const mockedClient = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn(),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({ prompts: {} }),
+        request: vi.fn().mockResolvedValue({ prompts: [] }),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const mockedMcpToTool = vi.mocked(GenAiLib.mcpToTool);
+
+      const client = new McpClient(
+        'prompt-only-server',
+        {
+          command: 'test-command',
+        },
+        {} as ToolRegistry,
+        { registerPrompt: vi.fn() } as unknown as PromptRegistry,
+        {} as WorkspaceContext,
+        false,
+      );
+
+      await client.connect();
+      // We expect this to throw because we are not returning any prompts in this test
+      await expect(client.discover({} as Config)).rejects.toThrow(
+        'No prompts or tools found on the server.',
+      );
+
+      expect(mockedMcpToTool).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
       consoleErrorSpy.mockRestore();
     });
   });
